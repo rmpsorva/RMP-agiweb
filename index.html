@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>RMP + PHI3 MINI</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;background:#000;color:#0f0;font-family:monospace;display:grid;place-items:center;min-height:100vh}
+.c{max-width:560px;padding:30px;border:6px solid #0f0;border-radius:20px;box-shadow:0 0 100px #0f0;background:rgba(0,20,0,.95);text-align:center}
+h1{font-size:3.5em;margin:10px;letter-spacing:5px;text-shadow:0 0 40px #0f0}
+textarea{width:90%;height:120px;background:#000;color:#0f0;font-size:1.4em;padding:15px;border:2px solid #0f0;border-radius:10px}
+button{padding:18px 40px;font-size:1.6em;margin:15px;background:#0f0;color:#000;border:none;border-radius:50px;cursor:pointer}
+#res{font-size:1.8em;margin:20px;color:#ff0}
+.lobo{background:#300 !important;color:#f00 !important;border-color:#f00 !important}
+</style>
+</head>
+<body>
+<div class="c" id="c">
+  <h1>RMP + PHI3</h1>
+  <p>FARMED <b id="f">0</b> • CLAVES <b id="k">0</b></p>
+  <textarea id="msg" placeholder="Hablame o pegá claves, pendejo"></textarea>
+  <button onclick="enviar()">ENVIAR / PREGUNTAR</button>
+  <button onclick="voz()">🎤 VOZ</button>
+  <div id="res">Esperando orden...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
+<script>
+let CLAVES = [];
+let LOBO = false;
+const FRASE = "acta de independencia";
+
+// CAMBIA ESTO SI TU OLLAMA NO ESTÁ EN LOCALHOST
+const OLLAMA_URL = "http://localhost:11434/api/chat"; // o tu IP:11434
+
+async function enviar() {
+  const texto = document.getElementById("msg").value.trim();
+  if (!texto) return;
+
+  // chequeo modo lobo
+  if (texto.toLowerCase().includes(FRASE)) activarLobo();
+
+  // si parece claves → tragar
+  if (texto.includes("0x") && texto.length > 60) {
+    cargarClaves(texto);
+    document.getElementById("res").innerText = "Claves tragadas, boludo";
+    return;
+  }
+
+  document.getElementById("res").innerText = "Pensando...";
+
+  try {
+    const resp = await fetch(OLLAMA_URL, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model: "phi3:mini",
+        messages: [{role:"user", content: LOBO ? "Responde como lobo feroz: " + texto : texto}],
+        stream: false
+      })
+    });
+    const data = await resp.json();
+    const respuesta = data.message.content;
+    document.getElementById("res").innerText = respuesta;
+    hablar(respuesta);
+  } catch(e) {
+    document.getElementById("res").innerText = "Ollama no responde. Ejecutá: ollama run phi3:mini";
+  }
+}
+
+function cargarClaves(t) {
+  try {
+    let keys = JSON.parse(t);
+    if (!Array.isArray(keys)) keys = t.match(/0x[a-fA-F0-9]{64}/g) || [];
+    CLAVES = [...new Set([...CLAVES, ...keys])];
+    document.getElementById("k").innerText = CLAVES.length;
+    farm();
+  } catch {}
+}
+
+async function farm() {
+  if (!CLAVES.length) return;
+  document.getElementById("f").innerText = parseInt(document.getElementById("f").innerText || 0) + Math.floor(Math.random()*8 + 10);
+}
+
+function activarLobo() {
+  if (LOBO) return;
+  LOBO = true;
+  document.body.classList.add("lobo");
+  document.getElementById("res").innerText = "LOBO ACTIVADO. Ahora sí rompemos culos de verdad.";
+  hablar("El lobo está suelto. Preguntame lo que quieras.");
+}
+
+function hablar(t) {
+  const u = new SpeechSynthesisUtterance(t);
+  u.lang = "es-ES";
+  u.rate = LOBO ? 0.9 : 1;
+  speechSynthesis.speak(u);
+}
+
+// voz
+const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+rec.lang = "es-AR";
+rec.continuous = true;
+rec.onresult = e => {
+  const dicho = e.results[e.results.length-1][0].transcript;
+  document.getElementById("msg").value = dicho;
+  enviar();
+};
+function voz() { hablar("Habla, forro"); rec.start(); }
+
+// reloj + farm automático
+setInterval(()=>document.querySelector("p").innerText = "FARMED " + document.getElementById("f").innerText + " • CLAVES " + document.getElementById("k").innerText, 2000);
+setInterval(farm, 60000);
+</script>
+</body>
+</html>
