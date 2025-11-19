@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>RMP-AGIWEB + PHI3</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;background:#000;color:#0f0;font-family:monospace;display:grid;place-items:center;min-height:100vh}
+.c{max-width:560px;padding:40px;border:6px solid #0f0;border-radius:20px;box-shadow:0 0 100px #0f0;background:rgba(0,20,0,.95);text-align:center}
+h1{font-size:3.5em;margin:10px;letter-spacing:5px;text-shadow:0 0 40px #0f0}
+textarea{width:90%;height:140px;background:#000;color:#0f0;font-size:1.4em;padding:15px;border:2px solid #0f0;border-radius:10px}
+button{padding:18px 40px;font-size:1.6em;margin:15px;background:#0f0;color:#000;border:none;border-radius:50px;cursor:pointer}
+#res{font-size:1.6em;margin:20px;color:#ff0;min-height:60px}
+.lobo{background:#300 !important;color:#f00 !important;border-color:#f00 !important}
+</style>
+</head>
+<body>
+<div class="c" id="c">
+  <h1>RMP + PHI3</h1>
+  <p>FARMED <b id="f">0</b> • CLAVES <b id="k">0</b></p>
+  <textarea id="msg" placeholder="Hablame, pegá claves o decí la frase secreta"></textarea>
+  <button onclick="enviar()">ENVIAR</button>
+  <button onclick="voz()">🎤 VOZ</button>
+  <input type="file" id="file" multiple style="margin:20px">
+  <button onclick="subirArchivo()">CARGAR ARCHIVO</button>
+  <div id="res">Listo para romper culos...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
+<script>
+// URL del worker (cámbiala por tu worker real)
+const WORKER_URL = "https://rmp-agiweb.rmpaicom.workers.dev";
+
+let LOBO = false;
+const FRASE = "acta de independencia";
+
+async function enviar() {
+  const texto = document.getElementById("msg").value.trim();
+  if (!texto) return;
+
+  if (texto.toLowerCase().includes(FRASE)) activarLobo();
+
+  // Si parece claves → enviar al worker
+  if (texto.includes("0x") && texto.length > 60) {
+    await fetch(WORKER_URL, {method:"POST",body:texto});
+    document.getElementById("res").innerText = "Claves enviadas al worker";
+    return;
+  }
+
+  // De lo contrario → Ollama phi3
+  document.getElementById("res").innerText = "Pensando con phi3...";
+  try {
+    const r = await fetch("http://localhost:11434/api/chat", {
+      method:"POST",
+      body:JSON.stringify({model:"phi3:mini",messages:[{role:"user",content:LOBO?"Responde como lobo feroz: "+texto:texto}],stream:false})
+    });
+    const d = await r.json();
+    document.getElementById("res").innerText = d.message.content;
+    hablar(d.message.content);
+  } catch { document.getElementById("res").innerText = "Ollama no está corriendo (ollama run phi3:mini)"; }
+}
+
+function subirArchivo() {
+  const files = document.getElementById("file").files;
+  for (const f of files) {
+    f.text().then(t => enviar(t));
+  }
+}
+
+function activarLobo() {
+  if (LOBO) return;
+  LOBO = true;
+  document.body.classList.add("lobo");
+  document.getElementById("res").innerText = "LOBO DESPERTADO. Ahora sí rompemos culos de verdad.";
+  hablar("El lobo está suelto");
+}
+
+function hablar(t) {
+  const u = new SpeechSynthesisUtterance(t);
+  u.lang = "es-ES";
+  speechSynthesis.speak(u);
+}
+
+const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+rec.lang = "es-AR";
+rec.continuous = true;
+rec.onresult = e => {
+  const dicho = e.results[e.results.length-1][0].transcript;
+  document.getElementById("msg").value = dicho;
+  enviar();
+};
+function voz() { hablar("Habla"); rec.start(); }
+
+// refrescar estado cada 30 seg
+setInterval(async () => {
+  const r = await fetch(WORKER_URL + "/json");
+  const d = await r.json();
+  document.getElementById("f").innerText = d.farmed || 0;
+  document.getElementById("k").innerText = d.claves || 0;
+}, 30000);
+</script>
+</body>
+</html>
